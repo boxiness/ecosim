@@ -15,45 +15,16 @@ Green = grass Blue = herbivore Red = predator White digits = current energ
 import pygame, random, noise
 import csv, time
 import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import ttk
 from collections import defaultdict
 from collections import deque
 from matplotlib.animation import FuncAnimation
 
-# ---------------- GLOBAL CONSTANTS ---------------- #
-GRID_W, GRID_H = 120, 60          # grid dimensions (tiles)
-TILE           = 10              # pixel size of a tile
-FPS            = 8
-
-ROCK_THRESH = 0.15                # smaller = more rocks
-ROCK_SCALE = 10.0                 # bigger = larger rock blobs
-
-NUM_HERB = 50                    # initial herbivores
-NUM_PRED = 10                     # initial predators
-
-FOOD_REGROW   = 30               # turns for eaten grass to regrow
-
-# Herbivore energetics
-H_INIT        = 10
-H_MOVE_COST   = 1
-H_BASAL_COST  = 0
-H_FOOD_GAIN   = 3
-H_FOOD_WAIT   = 1
-H_REPRO_COST  = 5
-H_REPRO_TH    = 25
-
-# Predator energetics
-P_INIT        = 30
-P_MOVE_COST   = 1
-P_BASAL_COST  = 0
-P_FOOD_GAIN   = 10
-P_FOOD_WAIT   = 2
-P_REPRO_COST  = 10
-P_REPRO_TH    = 70
-
 # Colours (R,G,B)
-COL_BG = (230, 255, 200) # (30, 30, 30)
+COL_BG = (230, 255, 200)
 COL_ROCK  = (120, 120, 120)
-COL_FOOD = (150, 250, 150) # (0, 160, 0)
+COL_FOOD = (150, 250, 150)
 COL_HERB = (70, 160, 255)
 COL_PRED = (200, 60, 60)
 COL_TEXT = (255, 255, 255)
@@ -61,8 +32,118 @@ COL_TEXT = (255, 255, 255)
 DIRS = [(0,-1),(1,0),(0,1),(-1,0)]   # N,E,S,W
 wrap = lambda v, size: v % size      # toroidal helper
 
-# Max # of frames for the chart
-MAX_WIN = 1000
+# 1) Define a list of all “configurable” parameters and their defaults
+PARAMS = [
+    ("GRID_W",        120, "number of columns in the grid"),
+    ("GRID_H",         60, "number of rows in the grid"),
+    ("TILE",           10, "pixel size of each grid cell"),
+    ("FPS",             8, "frames per second for the simulation loop"),
+    ("MAX_WIN",      1000, "max recent frames shown in the live plot"),
+    ("ROCK_THRESH",  0.15, "noise threshold (0–1) for rock placement density"),
+    ("ROCK_SCALE",   10.0, "scale factor controlling size of rock clusters"),
+    ("NUM_HERB",       50, "initial count of herbivore agents"),
+    ("NUM_PRED",       10, "initial count of predator agents"),
+    ("FOOD_REGROW",    30, "turns it takes for eaten grass to regrow"),
+    ("H_INIT",         10, "starting energy for each herbivore"),
+    ("H_MOVE_COST",     1, "energy cost for each herbivore move"),
+    ("H_BASAL_COST",    0, "energy cost per turn for simply existing (herbivore)"),
+    ("H_FOOD_GAIN",     3, "energy herbivore gains from eating grass"),
+    ("H_FOOD_WAIT",     1, "turns herbivore must wait after eating"),
+    ("H_REPRO_COST",    5, "additional energy cost for herbivore reproduction"),
+    ("H_REPRO_TH",     25, "energy threshold at which herbivore reproduces"),
+    ("P_INIT",         30, "starting energy for each predator"),
+    ("P_MOVE_COST",     1, "energy cost for each predator move"),
+    ("P_BASAL_COST",    0, "energy cost per turn for simply existing (predator)"),
+    ("P_FOOD_GAIN",    10, "energy predator gains from eating a herbivore"),
+    ("P_FOOD_WAIT",     2, "turns predator must wait after eating"),
+    ("P_REPRO_COST",   10, "additional energy cost for predator reproduction"),
+    ("P_REPRO_TH",     70, "energy threshold at which predator reproduces"),
+]
+
+def show_config_window():
+    root = tk.Tk()
+    root.title("Simulation Configuration")
+
+    entries = {}   # holds StringVar for each parameter
+    chosen_config = {}  # will be filled once "Start" is clicked
+
+    # Create a Label + Entry + Comment for each parameter
+    for i, (name, default, comment) in enumerate(PARAMS):
+        ttk.Label(root, text=name).grid(row=i, column=0, sticky="e", padx=5, pady=2)
+        var = tk.StringVar(value=str(default))
+        e = ttk.Entry(root, textvariable=var, width=10)
+        e.grid(row=i, column=1, padx=5, pady=2)
+        entries[name] = var
+
+        # Add the comment label in column 2
+        ttk.Label(root, text=comment, foreground="#555").grid(
+            row=i, column=2, sticky="w", padx=10, pady=2
+        )
+
+    def on_start():
+        # 1) Gather all entry values into a local config dict
+        local_cfg = {}
+        for name, _, _ in PARAMS:
+            val = entries[name].get()
+            # auto-detect int vs float
+            if "." in val:
+                local_cfg[name] = float(val)
+            else:
+                local_cfg[name] = int(val)
+
+        # 2) Store into the outer chosen_config and destroy the window
+        chosen_config.update(local_cfg)
+        root.destroy()
+        # DO NOT call launch_simulation() here!
+
+    start_btn = ttk.Button(root, text="Start Simulation", command=on_start)
+    start_btn.grid(row=len(PARAMS), column=0, columnspan=3, pady=10)
+
+    root.mainloop()
+
+    # At this point, root.destroy() has been called and mainloop() has returned.
+    # If the user clicked "Start", chosen_config will be non-empty.
+    if chosen_config:
+        launch_simulation(chosen_config)
+
+# 2) Modify your existing main(...) to accept a config dict
+def launch_simulation(cfg):
+    # Unpack everything from cfg into your globals (or pass them directly to the classes)
+    global GRID_W, GRID_H, TILE, FPS
+    global MAX_WIN
+    global ROCK_THRESH, ROCK_SCALE
+    global NUM_HERB, NUM_PRED, FOOD_REGROW
+    global H_INIT, H_MOVE_COST, H_BASAL_COST, H_FOOD_GAIN, H_FOOD_WAIT, H_REPRO_COST, H_REPRO_TH
+    global P_INIT, P_MOVE_COST, P_BASAL_COST, P_FOOD_GAIN, P_FOOD_WAIT, P_REPRO_COST, P_REPRO_TH
+
+    GRID_W      = cfg["GRID_W"]
+    GRID_H      = cfg["GRID_H"]
+    TILE        = cfg["TILE"]
+    FPS         = cfg["FPS"]
+    MAX_WIN     = cfg["MAX_WIN"]
+    ROCK_THRESH = cfg["ROCK_THRESH"]
+    ROCK_SCALE  = cfg["ROCK_SCALE"]
+    NUM_HERB    = cfg["NUM_HERB"]
+    NUM_PRED    = cfg["NUM_PRED"]
+    FOOD_REGROW = cfg["FOOD_REGROW"]
+    H_INIT      = cfg["H_INIT"]
+    H_MOVE_COST = cfg["H_MOVE_COST"]
+    H_BASAL_COST= cfg["H_BASAL_COST"]
+    H_FOOD_GAIN = cfg["H_FOOD_GAIN"]
+    H_FOOD_WAIT = cfg["H_FOOD_WAIT"]
+    H_REPRO_COST= cfg["H_REPRO_COST"]
+    H_REPRO_TH  = cfg["H_REPRO_TH"]
+    P_INIT      = cfg["P_INIT"]
+    P_MOVE_COST = cfg["P_MOVE_COST"]
+    P_BASAL_COST= cfg["P_BASAL_COST"]
+    P_FOOD_GAIN = cfg["P_FOOD_GAIN"]
+    P_FOOD_WAIT = cfg["P_FOOD_WAIT"]
+    P_REPRO_COST= cfg["P_REPRO_COST"]
+    P_REPRO_TH  = cfg["P_REPRO_TH"]
+
+    # Now call the original Pygame simulation entrypoint (rename your old main to something like run_game)
+    run_game()
+
     
 # ---------------- WORLD (Grass grid) ---------------- #
 class FoodGrid:
@@ -212,10 +293,12 @@ def draw_energy(screen, font, value, x, y):
     rect = txt.get_rect(center=(x*TILE+TILE//2, y*TILE+TILE//2))
     screen.blit(txt, rect)
 
-def main():
+def run_game():
     # ----- set up Matplotlib live plot -----
     plt.ion()
     fig, ax1 = plt.subplots()
+    
+    # set up plot axes
     ax1.set_xlabel("frame")
     ax1.set_ylabel("predator")
 
@@ -352,11 +435,14 @@ def main():
         # ===== ENVIRONMENT UPDATE =====
         grass.update()
         
+
         # ===== MATPLOTLIB UPDATE =====
         t_hist.append(t)
         herb_hist.append(len(herb))
         pred_hist.append(len(pred))
-        plt.pause(0.001)                  # let matplotlib process GUI events
+        # only update if the figure is still open
+        if plt.fignum_exists(fig.number):
+            plt.pause(0.001)                    # let matplotlib process GUI events
         
         # log to csv
         writer.writerow([t, len(herb), len(pred), sum(sum(row) for row in grass.food)])
@@ -385,4 +471,4 @@ def main():
     log.close()
 
 if __name__ == "__main__":
-    main()
+    show_config_window()
