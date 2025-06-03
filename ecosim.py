@@ -348,7 +348,7 @@ def run_game():
     pred_hist   = deque(maxlen=MAX_PLOT)
 
     def update_plot(frame):
-        if t_hist:
+        if t_hist and len(t_hist) >= 2:
             ax1.set_xlim(t_hist[0], t_hist[-1])
         ln_herb.set_data(t_hist, herb_hist)
         ln_pred.set_data(t_hist, pred_hist)
@@ -356,7 +356,7 @@ def run_game():
         ax2.relim(); ax2.autoscale_view()
         return ln_herb, ln_pred
 
-    anim = FuncAnimation(fig, update_plot, interval=200)  # 5 fps for chart
+    anim = FuncAnimation(fig, update_plot, interval=200, cache_frame_data=False)  # 5 fps for chart
     # ----- end matplotlib setup -----
 
     log = open("pop_log.csv", "w", newline="")
