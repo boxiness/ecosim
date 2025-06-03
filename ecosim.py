@@ -34,75 +34,105 @@ wrap = lambda v, size: v % size      # toroidal helper
 
 # 1) Define a list of all “configurable” parameters and their defaults
 PARAMS = [
-    ("GRID_W",        120, "number of columns in the grid"),
-    ("GRID_H",         60, "number of rows in the grid"),
-    ("TILE",           10, "pixel size of each grid cell"),
-    ("FPS",             8, "frames per second for the simulation loop"),
-    ("MAX_WIN",      1000, "max recent frames shown in the live plot"),
-    ("ROCK_THRESH",  0.15, "noise threshold (0–1) for rock placement density"),
-    ("ROCK_SCALE",   10.0, "scale factor controlling size of rock clusters"),
-    ("NUM_HERB",       50, "initial count of herbivore agents"),
-    ("NUM_PRED",       10, "initial count of predator agents"),
-    ("FOOD_REGROW",    30, "turns it takes for eaten grass to regrow"),
-    ("H_INIT",         10, "starting energy for each herbivore"),
-    ("H_MOVE_COST",     1, "energy cost for each herbivore move"),
-    ("H_BASAL_COST",    0, "energy cost per turn for simply existing (herbivore)"),
-    ("H_FOOD_GAIN",     3, "energy herbivore gains from eating grass"),
-    ("H_FOOD_WAIT",     1, "turns herbivore must wait after eating"),
-    ("H_REPRO_COST",    5, "additional energy cost for herbivore reproduction"),
-    ("H_REPRO_TH",     25, "energy threshold at which herbivore reproduces"),
-    ("P_INIT",         30, "starting energy for each predator"),
-    ("P_MOVE_COST",     1, "energy cost for each predator move"),
-    ("P_BASAL_COST",    0, "energy cost per turn for simply existing (predator)"),
-    ("P_FOOD_GAIN",    10, "energy predator gains from eating a herbivore"),
-    ("P_FOOD_WAIT",     2, "turns predator must wait after eating"),
-    ("P_REPRO_COST",   10, "additional energy cost for predator reproduction"),
-    ("P_REPRO_TH",     70, "energy threshold at which predator reproduces"),
+    # (name, default, comment, tab_name)
+    ("GRID_W",        120, "number of columns in the grid",                 "Environment"),
+    ("GRID_H",         60, "number of rows in the grid",                    "Environment"),
+    ("TILE",           10, "pixel size of each grid cell",                  "Environment"),
+    ("FPS",             8, "frames per second for the simulation loop",     "Environment"),
+    ("MAX_PLOT",     1000, "max recent frames shown in the live plot",      "Environment"),
+    ("ROCK_THRESH",  0.15, "noise threshold (0–1) for rock placement",      "Environment"),
+    ("ROCK_SCALE",   10.0, "scale factor controlling size of rock clusters","Environment"),
+    ("FOOD_INIT",     0.3, "initial percent (0–1) of land covered by food", "Environment"),
+    ("NUM_HERB",      150, "initial count of herbivore agents",             "Environment"),
+    ("NUM_PRED",       20, "initial count of predator agents",              "Environment"),
+    ("FOOD_REGROW",    30, "turns it takes for eaten grass to regrow",      "Environment"),
+
+    # Herbivore-specific
+    ("H_INIT",         10, "starting energy for each herbivore",            "Herbivores"),
+    ("H_MOVE_COST",     1, "energy cost for each herbivore move",           "Herbivores"),
+    ("H_BASAL_COST",    0, "energy cost per turn for existing (herbivore)", "Herbivores"),
+    ("H_FOOD_GAIN",     3, "energy herbivore gains from eating grass",      "Herbivores"),
+    ("H_FOOD_WAIT",     1, "turns herbivore must wait after eating",        "Herbivores"),
+    ("H_REPRO_COST",    5, "extra energy cost for herbivore reproduction",  "Herbivores"),
+    ("H_REPRO_TH",     25, "energy threshold at which herbivore reproduces","Herbivores"),
+
+    # Predator-specific
+    ("P_INIT",         30, "starting energy for each predator",             "Predators"),
+    ("P_MOVE_COST",     1, "energy cost for each predator move",            "Predators"),
+    ("P_BASAL_COST",    0, "energy cost per turn for existing (predator)",  "Predators"),
+    ("P_FOOD_GAIN",    10, "energy predator gains from eating a herbivore", "Predators"),
+    ("P_FOOD_WAIT",     2, "turns predator must wait after eating",         "Predators"),
+    ("P_REPRO_COST",   10, "extra energy cost for predator reproduction",   "Predators"),
+    ("P_REPRO_TH",     70, "energy threshold at which predator reproduces", "Predators"),
 ]
 
 def show_config_window():
     root = tk.Tk()
     root.title("Simulation Configuration")
+    root.geometry("600x500")  # give it a reasonable default size
 
-    entries = {}   # holds StringVar for each parameter
-    chosen_config = {}  # will be filled once "Start" is clicked
+    # 1) Create a Notebook widget
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # Create a Label + Entry + Comment for each parameter
-    for i, (name, default, comment) in enumerate(PARAMS):
-        ttk.Label(root, text=name).grid(row=i, column=0, sticky="e", padx=5, pady=2)
+    # 2) One frame per tab
+    tabs = {
+        "Environment": ttk.Frame(notebook),
+        "Herbivores":  ttk.Frame(notebook),
+        "Predators":   ttk.Frame(notebook),
+    }
+    for tab_name, frame in tabs.items():
+        notebook.add(frame, text=tab_name)
+
+    # 3) For each tab, we’ll stack its rows in a grid.
+    #    Keep track of which row next in each tab.
+    row_counters = { "Environment": 0, "Herbivores": 0, "Predators": 0 }
+    entries = {}   # name → StringVar
+
+    # 4) Build Label + Entry + comment under the appropriate tab
+    for name, default, comment, tab_name in PARAMS:
+        r = row_counters[tab_name]
+        frame = tabs[tab_name]
+
+        ttk.Label(frame, text=name).grid(row=r, column=0, sticky="e", padx=5, pady=2)
         var = tk.StringVar(value=str(default))
-        e = ttk.Entry(root, textvariable=var, width=10)
-        e.grid(row=i, column=1, padx=5, pady=2)
+        ttk.Entry(frame, textvariable=var, width=10).grid(row=r, column=1, padx=5, pady=2)
         entries[name] = var
 
-        # Add the comment label in column 2
-        ttk.Label(root, text=comment, foreground="#555").grid(
-            row=i, column=2, sticky="w", padx=10, pady=2
+        ttk.Label(frame, text=comment, foreground="#555").grid(
+            row=r, column=2, sticky="w", padx=10, pady=2
         )
 
+        row_counters[tab_name] += 1
+
+    chosen_config = {}
+
     def on_start():
-        # 1) Gather all entry values into a local config dict
-        local_cfg = {}
-        for name, _, _ in PARAMS:
-            val = entries[name].get()
-            # auto-detect int vs float
+        # Gather all entries into chosen_config
+        for name, default, comment, tab_name in PARAMS:
+            val = entries[name].get().strip()
             if "." in val:
-                local_cfg[name] = float(val)
+                try:
+                    chosen_config[name] = float(val)
+                except ValueError:
+                    chosen_config[name] = default
             else:
-                local_cfg[name] = int(val)
+                try:
+                    chosen_config[name] = int(val)
+                except ValueError:
+                    chosen_config[name] = default
 
-        # 2) Store into the outer chosen_config and destroy the window
-        chosen_config.update(local_cfg)
         root.destroy()
-        # DO NOT call launch_simulation() here!
+        # At this point, `root.mainloop()` will return, and we can launch
+        # the simulation if chosen_config is nonempty.
 
+    # 5) Place a “Start Simulation” button below all tabs (in root)
     start_btn = ttk.Button(root, text="Start Simulation", command=on_start)
-    start_btn.grid(row=len(PARAMS), column=0, columnspan=3, pady=10)
+    start_btn.pack(pady=10)
 
     root.mainloop()
 
-    # At this point, root.destroy() has been called and mainloop() has returned.
-    # If the user clicked "Start", chosen_config will be non-empty.
+    # 6) After the window closes:
     if chosen_config:
         launch_simulation(chosen_config)
 
@@ -110,9 +140,9 @@ def show_config_window():
 def launch_simulation(cfg):
     # Unpack everything from cfg into your globals (or pass them directly to the classes)
     global GRID_W, GRID_H, TILE, FPS
-    global MAX_WIN
+    global MAX_PLOT
     global ROCK_THRESH, ROCK_SCALE
-    global NUM_HERB, NUM_PRED, FOOD_REGROW
+    global FOOD_INIT, NUM_HERB, NUM_PRED, FOOD_REGROW
     global H_INIT, H_MOVE_COST, H_BASAL_COST, H_FOOD_GAIN, H_FOOD_WAIT, H_REPRO_COST, H_REPRO_TH
     global P_INIT, P_MOVE_COST, P_BASAL_COST, P_FOOD_GAIN, P_FOOD_WAIT, P_REPRO_COST, P_REPRO_TH
 
@@ -120,9 +150,10 @@ def launch_simulation(cfg):
     GRID_H      = cfg["GRID_H"]
     TILE        = cfg["TILE"]
     FPS         = cfg["FPS"]
-    MAX_WIN     = cfg["MAX_WIN"]
+    MAX_PLOT    = cfg["MAX_PLOT"]
     ROCK_THRESH = cfg["ROCK_THRESH"]
     ROCK_SCALE  = cfg["ROCK_SCALE"]
+    FOOD_INIT   = cfg["FOOD_INIT"]
     NUM_HERB    = cfg["NUM_HERB"]
     NUM_PRED    = cfg["NUM_PRED"]
     FOOD_REGROW = cfg["FOOD_REGROW"]
@@ -149,8 +180,8 @@ def launch_simulation(cfg):
 class FoodGrid:
     def __init__(self, w, h, rocks):
         self.w, self.h, self.rocks = w, h, rocks
-        self.food  = [[True for _ in range(w)] for _ in range(h)]
-        self.timer = [[0    for _ in range(w)] for _ in range(h)]
+        self.food = [[random.random() < FOOD_INIT for _ in range(w)] for _ in range(h)]
+        self.timer = [[random.random() * FOOD_REGROW for _ in range(w)] for _ in range(h)]
         
         for (x,y) in rocks:
             self.food[y][x]  = False     # no grass
@@ -312,9 +343,9 @@ def run_game():
     ax1.legend(loc="upper left")
     ax2.legend(loc="upper right")
 
-    t_hist      = deque(maxlen=MAX_WIN)
-    herb_hist   = deque(maxlen=MAX_WIN)
-    pred_hist   = deque(maxlen=MAX_WIN)
+    t_hist      = deque(maxlen=MAX_PLOT)
+    herb_hist   = deque(maxlen=MAX_PLOT)
+    pred_hist   = deque(maxlen=MAX_PLOT)
 
     def update_plot(frame):
         if t_hist:
