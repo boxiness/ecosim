@@ -2,6 +2,7 @@
 
 **Version 0.8** — Ecosystem simulation with grass, herbivores, and predators.  
 Built in Python 3.13 using Pygame, Matplotlib, Tkinter and Perlin noise.
+Youtube video: https://youtu.be/aYvFl_cpRyY?si=CRsEHAYnCtoxQ5BN
 
 ---
 
